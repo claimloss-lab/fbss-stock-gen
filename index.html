@@ -255,8 +255,16 @@
     </div>
   </div>
 
-  <!-- Generate -->
-  <div class="btn-row" style="margin-bottom:24px; margin-top:-8px;">
+  <!-- Preview + Generate -->
+  <div id="previewBar" style="display:none;margin-bottom:12px;margin-top:-4px">
+    <div style="background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:8px;padding:10px 16px;font-family:var(--mono);font-size:11px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+      <span style="color:var(--muted)">PREVIEW:</span>
+      <span id="prev-file" style="color:var(--amber)"></span>
+      <span id="prev-records" style="color:var(--accent)"></span>
+      <span id="prev-onu" style="color:#a78bfa;display:none">+ dummy ONU ×<span id="prev-onu-qty"></span></span>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-bottom:24px; margin-top:0">
     <button class="btn btn-primary" onclick="generate()">▶ Generate TXT</button>
     <button class="btn btn-secondary" onclick="clearOutput()">✕ Clear</button>
   </div>
@@ -275,6 +283,28 @@
       <button class="btn btn-primary" onclick="downloadTxt()" id="dlBtn" style="display:none">⬇ Download .dat</button>
       <button class="btn btn-secondary" onclick="copyOutput()" id="copyBtn" style="display:none">⎘ Copy</button>
     </div>
+  </div>
+
+  <!-- History Log -->
+  <div class="card" id="historyCard" style="display:none">
+    <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;margin-bottom:12px">
+      <span>Session History</span>
+      <button onclick="clearHistory()" style="background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;cursor:pointer">✕ Clear</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">#</th>
+          <th style="text-align:left;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Filename</th>
+          <th style="text-align:left;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Template</th>
+          <th style="text-align:left;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Material</th>
+          <th style="text-align:right;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Rows</th>
+          <th style="text-align:left;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Time</th>
+          <th style="text-align:center;padding:5px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Re-DL</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
   </div>
 </div>
 
@@ -309,9 +339,14 @@
         <button class="btn-add" onclick="addRecord()" title="Add">+</button>
       </div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-primary" onclick="saveManage()">✓ Save Changes</button>
-      <button class="btn btn-secondary" onclick="resetManage()">↺ Reset to Default</button>
+      <button class="btn btn-secondary" onclick="resetManage()">↺ Reset</button>
+      <button class="btn btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
+      <label class="btn btn-secondary" style="cursor:pointer;margin:0">
+        ⬆ Import CSV
+        <input type="file" accept=".csv" id="csvImport" style="display:none" onchange="importCSV(event)" />
+      </label>
       <button class="btn btn-secondary" onclick="closeManage()" style="margin-left:auto">Cancel</button>
     </div>
   </div>
@@ -474,6 +509,7 @@ function onMatChange() {
   document.getElementById('mi-model').textContent = opt.dataset.m;
   document.getElementById('mi-sn').textContent = opt.dataset.s;
   info.style.display = 'flex';
+  updatePreview();
 }
 
 function randSerial16() {
@@ -499,6 +535,114 @@ function showAlert(msg, type) {
 function clearAlert() {
   const a = document.getElementById('alert');
   a.className = 'alert';
+}
+
+// ── Preview bar update ──
+function updatePreview() {
+  const matCode = document.getElementById('matCode').value;
+  const qty = parseInt(document.getElementById('qty').value) || 1;
+  const importDate = document.getElementById('importDate').value || todayStr();
+  const bar = document.getElementById('previewBar');
+  if (!matCode) { bar.style.display = 'none'; return; }
+  const sel = document.getElementById('matCode');
+  const opt = sel.selectedOptions[0];
+  const spType = opt ? opt.dataset.t : '';
+  const d = DEFAULTS[currentTemplate];
+  const fname = d.prefix + '_' + importDate + '_HHMMSS.dat';
+  const isWifi = spType === 'Wifi router';
+  const hasDummy = (currentTemplate === '1200' || currentTemplate === '1800') && isWifi;
+  const totalRows = hasDummy ? qty * 2 : qty;
+  document.getElementById('prev-file').textContent = fname;
+  document.getElementById('prev-records').textContent = qty + ' record' + (qty>1?'s':'') + ' → ' + totalRows + ' rows';
+  const onuEl = document.getElementById('prev-onu');
+  if (hasDummy) { onuEl.style.display='inline'; document.getElementById('prev-onu-qty').textContent = qty; }
+  else onuEl.style.display = 'none';
+  bar.style.display = 'block';
+}
+
+// Hook preview update on matCode and qty change
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('matCode').addEventListener('change', updatePreview);
+  document.getElementById('qty').addEventListener('input', updatePreview);
+  document.getElementById('importDate').addEventListener('input', updatePreview);
+});
+
+// ── History ──
+const sessionHistory = [];
+
+function addHistory(entry) {
+  sessionHistory.unshift(entry);
+  renderHistory();
+  document.getElementById('historyCard').style.display = 'block';
+}
+
+function renderHistory() {
+  const tbody = document.getElementById('historyBody');
+  tbody.innerHTML = sessionHistory.map((h, i) => `
+    <tr style="border-bottom:1px solid rgba(30,58,95,.3)">
+      <td style="padding:5px 8px;color:var(--muted)">${sessionHistory.length - i}</td>
+      <td style="padding:5px 8px;color:var(--amber)">${escHtml(h.filename)}</td>
+      <td style="padding:5px 8px;color:var(--text)">${h.template.toUpperCase()}</td>
+      <td style="padding:5px 8px;color:var(--text)">${escHtml(h.matCode)}</td>
+      <td style="padding:5px 8px;color:var(--accent);text-align:right">${h.totalRows}</td>
+      <td style="padding:5px 8px;color:var(--muted)">${h.time}</td>
+      <td style="padding:5px 8px;text-align:center">
+        <button onclick="reDownload(${i})" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:10px;padding:2px 8px;cursor:pointer">⬇</button>
+      </td>
+    </tr>`).join('');
+}
+
+function reDownload(i) {
+  const h = sessionHistory[i];
+  const blob = new Blob([h.content], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = h.filename;
+  a.click();
+}
+
+function clearHistory() {
+  sessionHistory.length = 0;
+  document.getElementById('historyBody').innerHTML = '';
+  document.getElementById('historyCard').style.display = 'none';
+}
+
+// ── Export CSV ──
+function exportCSV() {
+  const data = CUSTOM[editingTpl];
+  const header = 'Material Code,Vendor,Type,Model,SN Pattern\n';
+  const rows = data.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mat_' + editingTpl + '_export.csv';
+  a.click();
+}
+
+// ── Import CSV ──
+function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split(/\r?\n/).filter(l => l.trim());
+    const alertEl = document.getElementById('alertModal');
+    // skip header row if it starts with non-numeric / 'Material'
+    const dataLines = lines.filter(l => !l.toLowerCase().startsWith('material'));
+    const parsed = [];
+    for (const line of dataLines) {
+      const cols = line.split(',').map(c => c.replace(/^"|"$/g,'').replace(/""/g,'"').trim());
+      if (cols.length >= 4) parsed.push([cols[0], cols[1]||'', cols[2]||'', cols[3]||'', cols[4]||'B']);
+    }
+    if (parsed.length === 0) { alertEl.textContent = '⚠ ไม่พบข้อมูลใน CSV'; alertEl.className = 'alert error'; return; }
+    if (!confirm('Import ' + parsed.length + ' records? (จะแทนที่ข้อมูลปัจจุบันทั้งหมด)')) { event.target.value=''; return; }
+    CUSTOM[editingTpl] = parsed;
+    renderEditTable();
+    alertEl.textContent = '✓ Import ' + parsed.length + ' records สำเร็จ';
+    alertEl.className = 'alert success';
+    event.target.value = '';
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 function generate() {
@@ -570,6 +714,11 @@ function generate() {
   document.getElementById('filenameLine').textContent = '📄 ' + filename;
   document.getElementById('dlBtn').style.display = '';
   document.getElementById('copyBtn').style.display = '';
+
+  // Add to history
+  const now = new Date();
+  const timeLabel = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  addHistory({ filename, template: currentTemplate, matCode, totalRows, content: lastOutput, time: timeLabel });
 }
 
 function escHtml(s) {
