@@ -181,6 +181,50 @@
   .btn-add:hover { opacity: .85; }
   .btn-manage { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all .2s; white-space: nowrap; }
   .btn-manage:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Searchable dropdown */
+  .sd-wrap { position: relative; }
+  .sd-input-row { display: flex; gap: 0; }
+  .sd-search {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px 0 0 6px; padding: 9px 12px; color: var(--text);
+    font-family: var(--mono); font-size: 13px; outline: none; transition: border-color .2s;
+  }
+  .sd-search:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,212,255,.12); }
+  .sd-search::placeholder { color: var(--muted); }
+  .sd-clear {
+    background: var(--surface2); border: 1px solid var(--border); border-left: none;
+    border-radius: 0 6px 6px 0; padding: 0 12px; color: var(--muted);
+    font-size: 14px; cursor: pointer; transition: color .15s;
+  }
+  .sd-clear:hover { color: var(--red); }
+  .sd-dropdown {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 8px; max-height: 280px; overflow-y: auto;
+    z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  .sd-dropdown.open { display: block; }
+  .sd-group-label {
+    padding: 6px 12px 4px; font-family: var(--mono); font-size: 10px;
+    color: var(--accent); letter-spacing: 2px; text-transform: uppercase;
+    background: rgba(0,212,255,.05); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+  }
+  .sd-item {
+    padding: 8px 12px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; display: flex; gap: 10px; align-items: baseline;
+    border-bottom: 1px solid rgba(30,58,95,.3); transition: background .1s;
+  }
+  .sd-item:hover, .sd-item.highlighted { background: rgba(0,212,255,.08); }
+  .sd-item.selected { background: rgba(0,212,255,.12); }
+  .sd-item-code { color: var(--text); min-width: 130px; }
+  .sd-item-type { color: var(--accent2); font-size: 10px; background: rgba(14,165,233,.12); padding: 1px 6px; border-radius: 3px; }
+  .sd-item-model { color: var(--muted); flex: 1; }
+  .sd-item-vendor { color: rgba(100,116,139,.6); font-size: 10px; }
+  .sd-empty { padding: 16px 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; }
+  .sd-count { padding: 5px 12px; font-family: var(--mono); font-size: 10px; color: var(--muted); border-top: 1px solid var(--border); text-align: right; }
+  mark { background: rgba(0,212,255,.25); color: var(--text); border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -208,9 +252,16 @@
           <label style="margin-bottom:0">Material Code</label>
           <button class="btn-manage" onclick="openManage()">✎ Manage Records</button>
         </div>
-        <select id="matCode" onchange="onMatChange()">
-          <option value="">— Select Material Code —</option>
-        </select>
+        <div class="sd-wrap" id="sdWrap">
+          <div class="sd-input-row">
+            <input class="sd-search" id="sdSearch" placeholder="ค้นหา Material Code, Model, Type, Vendor..." autocomplete="off"
+              oninput="sdFilter()" onfocus="sdOpen()" onkeydown="sdKey(event)" />
+            <button class="sd-clear" onclick="sdClear()" tabindex="-1" title="Clear">✕</button>
+          </div>
+          <div class="sd-dropdown scrollbar" id="sdDropdown"></div>
+        </div>
+        <!-- hidden value store -->
+        <input type="hidden" id="matCode" />
         <div class="mat-info" id="matInfo" style="display:none">
           <div><span>Vendor: </span><strong id="mi-vendor"></strong></div>
           <div><span>Type: </span><strong id="mi-type"></strong></div>
@@ -486,31 +537,146 @@ function setTemplate(tpl) {
   setLockState(false);
 }
 
+// ── Searchable Dropdown ──
+let sdAllItems = [];   // [{code,vendor,type,model,sn}, ...]
+let sdFiltered = [];
+let sdHlIdx = -1;
+let sdSelected = null;
+
 function populateMat(tpl) {
-  const sel = document.getElementById('matCode');
-  const data = getMatData(tpl);
-  sel.innerHTML = '<option value="">— Select Material Code —</option>';
-  data.forEach(r => {
-    const o = document.createElement('option');
-    o.value = r[0];
-    o.textContent = r[0] + ' [' + r[2] + '] ' + r[3];
-    o.dataset.v = r[1]; o.dataset.t = r[2]; o.dataset.m = r[3]; o.dataset.s = r[4];
-    sel.appendChild(o);
-  });
+  sdAllItems = getMatData(tpl).map(r => ({ code:r[0], vendor:r[1], type:r[2], model:r[3], sn:r[4] }));
+  sdFiltered = [...sdAllItems];
+  sdSelected = null;
+  document.getElementById('matCode').value = '';
+  document.getElementById('sdSearch').value = '';
+  document.getElementById('matInfo').style.display = 'none';
+  sdRender('');
+  sdClose();
 }
 
-function onMatChange() {
-  const sel = document.getElementById('matCode');
-  const opt = sel.selectedOptions[0];
-  const info = document.getElementById('matInfo');
-  if (!opt || !opt.value) { info.style.display = 'none'; return; }
-  document.getElementById('mi-vendor').textContent = opt.dataset.v;
-  document.getElementById('mi-type').textContent = opt.dataset.t;
-  document.getElementById('mi-model').textContent = opt.dataset.m;
-  document.getElementById('mi-sn').textContent = opt.dataset.s;
-  info.style.display = 'flex';
+function sdFilter() {
+  const q = document.getElementById('sdSearch').value.trim().toLowerCase();
+  sdFiltered = sdAllItems.filter(r =>
+    r.code.toLowerCase().includes(q) ||
+    r.type.toLowerCase().includes(q) ||
+    r.model.toLowerCase().includes(q) ||
+    r.vendor.toLowerCase().includes(q)
+  );
+  sdHlIdx = sdFiltered.length > 0 ? 0 : -1;
+  sdRender(q);
+  sdOpen();
+}
+
+function sdRender(q) {
+  const dd = document.getElementById('sdDropdown');
+  if (sdFiltered.length === 0) {
+    dd.innerHTML = '<div class="sd-empty">ไม่พบรายการที่ตรงกัน</div>';
+    return;
+  }
+  // Group by type
+  const groups = {};
+  sdFiltered.forEach((r, i) => {
+    if (!groups[r.type]) groups[r.type] = [];
+    groups[r.type].push({ ...r, _idx: i });
+  });
+  let html = '';
+  let flatIdx = 0;
+  Object.keys(groups).sort().forEach(type => {
+    html += '<div class="sd-group-label">' + escHtml(type) + ' <span style="color:var(--muted)">(' + groups[type].length + ')</span></div>';
+    groups[type].forEach(r => {
+      const hi = sdHlIdx === r._idx;
+      const sel = sdSelected && sdSelected.code === r.code;
+      const cls = 'sd-item' + (hi ? ' highlighted' : '') + (sel ? ' selected' : '');
+      html += '<div class="' + cls + '" data-idx="' + r._idx + '" onmousedown="sdSelect(' + r._idx + ')">'
+        + '<span class="sd-item-code">' + hlText(r.code, q) + '</span>'
+        + '<span class="sd-item-type">' + hlText(r.type, q) + '</span>'
+        + '<span class="sd-item-model">' + hlText(r.model, q) + '</span>'
+        + '<span class="sd-item-vendor">' + hlText(r.vendor, q) + '</span>'
+        + '</div>';
+    });
+  });
+  html += '<div class="sd-count">' + sdFiltered.length + ' / ' + sdAllItems.length + ' รายการ</div>';
+  dd.innerHTML = html;
+}
+
+function hlText(text, q) {
+  if (!q) return escHtml(text);
+  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+  return escHtml(text).replace(re, '<mark>$1</mark>');
+}
+
+function sdSelect(idx) {
+  const r = sdFiltered[idx];
+  if (!r) return;
+  sdSelected = r;
+  document.getElementById('matCode').value = r.code;
+  document.getElementById('sdSearch').value = r.code + ' [' + r.type + '] ' + r.model;
+  sdClose();
+  // update mat-info
+  document.getElementById('mi-vendor').textContent = r.vendor;
+  document.getElementById('mi-type').textContent = r.type;
+  document.getElementById('mi-model').textContent = r.model;
+  document.getElementById('mi-sn').textContent = r.sn;
+  document.getElementById('matInfo').style.display = 'flex';
   updatePreview();
 }
+
+function sdOpen() {
+  document.getElementById('sdDropdown').classList.add('open');
+}
+
+function sdClose() {
+  document.getElementById('sdDropdown').classList.remove('open');
+  sdHlIdx = -1;
+}
+
+function sdClear() {
+  sdSelected = null;
+  document.getElementById('matCode').value = '';
+  document.getElementById('sdSearch').value = '';
+  document.getElementById('matInfo').style.display = 'none';
+  sdFiltered = [...sdAllItems];
+  sdRender('');
+  sdClose();
+  updatePreview();
+  document.getElementById('sdSearch').focus();
+}
+
+function sdKey(e) {
+  const dd = document.getElementById('sdDropdown');
+  if (!dd.classList.contains('open') && e.key !== 'Escape') { sdOpen(); sdFilter(); return; }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    sdHlIdx = Math.min(sdHlIdx + 1, sdFiltered.length - 1);
+    sdRender(document.getElementById('sdSearch').value.trim().toLowerCase());
+    sdScrollToHl();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    sdHlIdx = Math.max(sdHlIdx - 1, 0);
+    sdRender(document.getElementById('sdSearch').value.trim().toLowerCase());
+    sdScrollToHl();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (sdHlIdx >= 0) sdSelect(sdHlIdx);
+  } else if (e.key === 'Escape') {
+    sdClose();
+  }
+}
+
+function sdScrollToHl() {
+  const dd = document.getElementById('sdDropdown');
+  const hl = dd.querySelector('.highlighted');
+  if (hl) hl.scrollIntoView({ block: 'nearest' });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('mousedown', (e) => {
+  if (!document.getElementById('sdWrap').contains(e.target)) sdClose();
+});
+
+function onMatChange() {} // kept for compatibility
+
+
 
 function randSerial16() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
