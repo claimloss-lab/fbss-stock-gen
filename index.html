@@ -273,9 +273,8 @@
         </div>
         <div class="sd-wrap" id="sdWrap">
           <div class="sd-input-row">
-            <input class="sd-search" id="sdSearch" placeholder="ค้นหา Material Code, Model, Type, Vendor..." autocomplete="off"
-              oninput="sdFilter()" onfocus="sdFocus()" onkeydown="sdKey(event)" />
-            <button class="sd-clear" onclick="sdClear()" tabindex="-1" title="Clear">✕</button>
+            <input class="sd-search" id="sdSearch" placeholder="ค้นหา Material Code, Model, Type, Vendor..." autocomplete="off" />
+            <button class="sd-clear" id="sdClearBtn" tabindex="-1" title="Clear">✕</button>
           </div>
           <div class="sd-dropdown scrollbar" id="sdDropdown"></div>
         </div>
@@ -637,11 +636,13 @@ function sdRender(q) {
   dd.innerHTML = html;
 }
 
+function escapeRegex(s) {
+  return s.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
+}
 function hlText(text, q) {
   if (!q) return escHtml(text);
   try {
-    const escaped = q.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
-    const re = new RegExp('(' + escaped + ')', 'gi');
+    const re = new RegExp('(' + escapeRegex(q) + ')', 'gi');
     return escHtml(text).replace(re, '<mark>$1</mark>');
   } catch(e) {
     return escHtml(text);
@@ -688,6 +689,14 @@ function sdClose() {
   sdHlIdx = -1;
 }
 
+function sdFocusOut(e) {
+  // Only close if focus moved completely outside sdWrap
+  const wrap = document.getElementById('sdWrap');
+  if (!wrap.contains(e.relatedTarget)) {
+    sdClose();
+  }
+}
+
 function sdClear() {
   sdSelected = null;
   document.getElementById('matCode').value = '';
@@ -727,12 +736,7 @@ function sdScrollToHl() {
   if (hl) hl.scrollIntoView({ block: 'nearest' });
 }
 
-// Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-  if (!document.getElementById('sdWrap').contains(e.target)) {
-    sdClose();
-  }
-});
+// Close dropdown when focus leaves the sd-wrap component entirely
 
 function onMatChange() {} // kept for compatibility
 
@@ -793,7 +797,22 @@ function updatePreview() {
 
 // Hook preview update on matCode and qty change
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('matCode').addEventListener('change', updatePreview);
+  // Material search events
+  const sdInput = document.getElementById('sdSearch');
+  sdInput.addEventListener('input', sdFilter);
+  sdInput.addEventListener('focus', sdFocus);
+  sdInput.addEventListener('keydown', sdKey);
+
+  // Close on focus leaving sd-wrap
+  document.getElementById('sdWrap').addEventListener('focusout', sdFocusOut);
+
+  // Clear button
+  document.getElementById('sdClearBtn').addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    sdClear();
+  });
+
+  // Preview updates
   document.getElementById('qty').addEventListener('input', updatePreview);
   document.getElementById('importDate').addEventListener('input', updatePreview);
 });
