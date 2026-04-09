@@ -52,6 +52,7 @@
     border-radius: 12px;
     padding: 24px;
     margin-bottom: 24px;
+    overflow: visible;
   }
   .card-title {
     font-family: var(--mono);
@@ -220,7 +221,7 @@
     display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: var(--surface); border: 1px solid var(--accent);
     border-radius: 8px; max-height: 280px; overflow-y: auto;
-    z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    z-index: 500; box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
   .sd-dropdown.open { display: block; }
   .sd-group-label {
@@ -624,7 +625,7 @@ function sdRender(q) {
       const hi = sdHlIdx === r._idx;
       const sel = sdSelected && sdSelected.code === r.code;
       const cls = 'sd-item' + (hi ? ' highlighted' : '') + (sel ? ' selected' : '');
-      html += '<div class="' + cls + '" data-idx="' + r._idx + '" onmousedown="sdSelect(' + r._idx + ')">'
+      html += '<div class="' + cls + '" data-idx="' + r._idx + '" onmousedown="event.preventDefault();sdSelect(' + r._idx + ')">'
         + '<span class="sd-item-code">' + hlText(r.code, q) + '</span>'
         + '<span class="sd-item-type">' + hlText(r.type, q) + '</span>'
         + '<span class="sd-item-model">' + hlText(r.model, q) + '</span>'
@@ -727,8 +728,10 @@ function sdScrollToHl() {
 }
 
 // Close dropdown when clicking outside
-document.addEventListener('mousedown', (e) => {
-  if (!document.getElementById('sdWrap').contains(e.target)) sdClose();
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('sdWrap').contains(e.target)) {
+    sdClose();
+  }
 });
 
 function onMatChange() {} // kept for compatibility
