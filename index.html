@@ -52,7 +52,6 @@
     border-radius: 12px;
     padding: 24px;
     margin-bottom: 24px;
-    overflow: visible;
   }
   .card-title {
     font-family: var(--mono);
@@ -183,24 +182,6 @@
   .btn-manage { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all .2s; white-space: nowrap; }
   .btn-manage:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* Mode toggle */
-  .mode-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 0; }
-  .mode-btn { flex: 1; padding: 7px 16px; background: var(--surface2); border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; letter-spacing: 1px; transition: all .15s; }
-  .mode-btn.active { background: var(--accent); color: #000; font-weight: 700; }
-  .mode-btn:hover:not(.active) { background: var(--border); color: var(--text); }
-  .manual-area {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
-    padding: 9px 12px; color: var(--text); font-family: var(--mono); font-size: 12px;
-    min-height: 110px; resize: vertical; width: 100%; outline: none; line-height: 1.6;
-    transition: border-color .2s;
-  }
-  .manual-area:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,212,255,.12); }
-  .manual-area::placeholder { color: var(--muted); }
-  .sn-counter { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
-  .sn-counter .cnt-ok { color: var(--green); font-weight: 700; }
-  .sn-counter .cnt-dup { color: var(--amber); }
-  .sn-counter .cnt-err { color: var(--red); }
-
   /* Searchable dropdown */
   .sd-wrap { position: relative; }
   .sd-input-row { display: flex; gap: 0; }
@@ -221,7 +202,7 @@
     display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: var(--surface); border: 1px solid var(--accent);
     border-radius: 8px; max-height: 280px; overflow-y: auto;
-    z-index: 500; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
   .sd-dropdown.open { display: block; }
   .sd-group-label {
@@ -273,8 +254,9 @@
         </div>
         <div class="sd-wrap" id="sdWrap">
           <div class="sd-input-row">
-            <input class="sd-search" id="sdSearch" placeholder="ค้นหา Material Code, Model, Type, Vendor..." autocomplete="off" />
-            <button class="sd-clear" id="sdClearBtn" tabindex="-1" title="Clear">✕</button>
+            <input class="sd-search" id="sdSearch" placeholder="ค้นหา Material Code, Model, Type, Vendor..." autocomplete="off"
+              oninput="sdFilter()" onfocus="sdOpen()" onkeydown="sdKey(event)" />
+            <button class="sd-clear" onclick="sdClear()" tabindex="-1" title="Clear">✕</button>
           </div>
           <div class="sd-dropdown scrollbar" id="sdDropdown"></div>
         </div>
@@ -314,27 +296,11 @@
         <label>Ship To (optional)</label>
         <input type="text" id="shipTo" placeholder="" readonly />
       </div>
-      <div class="form-group full">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <label style="margin-bottom:0">Serial No</label>
-          <div class="mode-toggle">
-            <button class="mode-btn active" id="modeRandom" onclick="setMode('random')">⚡ Random</button>
-            <button class="mode-btn" id="modeManual" onclick="setMode('manual')">✎ Manual</button>
-          </div>
-        </div>
-        <!-- Random mode -->
-        <div id="randomMode">
-          <div class="qty-row">
-            <input type="number" id="qty" value="1" min="1" max="1000" oninput="updatePreview()" />
-            <span class="qty-hint">ระบบจะ random serial 16 หลัก</span>
-          </div>
-        </div>
-        <!-- Manual mode -->
-        <div id="manualMode" style="display:none">
-          <textarea class="manual-area" id="manualSN"
-            placeholder="วาง Serial No ทีละบรรทัด หรือคั่นด้วยจุลภาค (,)&#10;ตัวอย่าง:&#10;ABC1234567890001&#10;ABC1234567890002&#10;ABC1234567890003"
-            oninput="countSN()"></textarea>
-          <div class="sn-counter" id="snCounter"></div>
+      <div class="form-group">
+        <label>Quantity (จำนวน Serial No)</label>
+        <div class="qty-row">
+          <input type="number" id="qty" value="1" min="1" max="1000" />
+          <span class="qty-hint">ระบบจะ random serial 16 หลัก</span>
         </div>
       </div>
     </div>
@@ -569,9 +535,6 @@ function setTemplate(tpl) {
   document.getElementById('matInfo').style.display = 'none';
   // re-lock เมื่อเปลี่ยน template
   setLockState(false);
-  // reset manual SN
-  document.getElementById('manualSN').value = '';
-  document.getElementById('snCounter').innerHTML = '';
 }
 
 // ── Searchable Dropdown ──
@@ -624,7 +587,7 @@ function sdRender(q) {
       const hi = sdHlIdx === r._idx;
       const sel = sdSelected && sdSelected.code === r.code;
       const cls = 'sd-item' + (hi ? ' highlighted' : '') + (sel ? ' selected' : '');
-      html += '<div class="' + cls + '" data-idx="' + r._idx + '" onmousedown="event.preventDefault();sdSelect(' + r._idx + ')">'
+      html += '<div class="' + cls + '" data-idx="' + r._idx + '" onmousedown="sdSelect(' + r._idx + ')">'
         + '<span class="sd-item-code">' + hlText(r.code, q) + '</span>'
         + '<span class="sd-item-type">' + hlText(r.type, q) + '</span>'
         + '<span class="sd-item-model">' + hlText(r.model, q) + '</span>'
@@ -636,17 +599,10 @@ function sdRender(q) {
   dd.innerHTML = html;
 }
 
-function escapeRegex(s) {
-  return s.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
-}
 function hlText(text, q) {
   if (!q) return escHtml(text);
-  try {
-    const re = new RegExp('(' + escapeRegex(q) + ')', 'gi');
-    return escHtml(text).replace(re, '<mark>$1</mark>');
-  } catch(e) {
-    return escHtml(text);
-  }
+  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+  return escHtml(text).replace(re, '<mark>$1</mark>');
 }
 
 function sdSelect(idx) {
@@ -669,32 +625,9 @@ function sdOpen() {
   document.getElementById('sdDropdown').classList.add('open');
 }
 
-function sdFocus() {
-  // Re-render with current search text (handles case where dropdown was empty)
-  const q = document.getElementById('sdSearch').value.trim().toLowerCase();
-  sdFiltered = sdAllItems.filter(r =>
-    !q ||
-    r.code.toLowerCase().includes(q) ||
-    r.type.toLowerCase().includes(q) ||
-    r.model.toLowerCase().includes(q) ||
-    r.vendor.toLowerCase().includes(q)
-  );
-  sdHlIdx = -1;
-  sdRender(q);
-  sdOpen();
-}
-
 function sdClose() {
   document.getElementById('sdDropdown').classList.remove('open');
   sdHlIdx = -1;
-}
-
-function sdFocusOut(e) {
-  // Only close if focus moved completely outside sdWrap
-  const wrap = document.getElementById('sdWrap');
-  if (!wrap.contains(e.relatedTarget)) {
-    sdClose();
-  }
 }
 
 function sdClear() {
@@ -736,7 +669,10 @@ function sdScrollToHl() {
   if (hl) hl.scrollIntoView({ block: 'nearest' });
 }
 
-// Close dropdown when focus leaves the sd-wrap component entirely
+// Close dropdown when clicking outside
+document.addEventListener('mousedown', (e) => {
+  if (!document.getElementById('sdWrap').contains(e.target)) sdClose();
+});
 
 function onMatChange() {} // kept for compatibility
 
@@ -770,49 +706,29 @@ function clearAlert() {
 // ── Preview bar update ──
 function updatePreview() {
   const matCode = document.getElementById('matCode').value;
+  const qty = parseInt(document.getElementById('qty').value) || 1;
   const importDate = document.getElementById('importDate').value || todayStr();
   const bar = document.getElementById('previewBar');
   if (!matCode) { bar.style.display = 'none'; return; }
-  let qty = 0;
-  if (currentMode === 'manual') {
-    const { unique } = parseSNList();
-    qty = unique.length;
-  } else {
-    qty = parseInt(document.getElementById('qty').value) || 1;
-  }
-  const spType = sdSelected ? sdSelected.type : '';
+  const sel = document.getElementById('matCode');
+  const opt = sel.selectedOptions[0];
+  const spType = opt ? opt.dataset.t : '';
   const d = DEFAULTS[currentTemplate];
   const fname = d.prefix + '_' + importDate + '_HHMMSS.dat';
   const isWifi = spType === 'Wifi router';
   const hasDummy = (currentTemplate === '1200' || currentTemplate === '1800') && isWifi;
   const totalRows = hasDummy ? qty * 2 : qty;
   document.getElementById('prev-file').textContent = fname;
-  const modeLabel = currentMode === 'manual' ? ' (manual)' : ' (random)';
-  document.getElementById('prev-records').textContent = qty + ' SN' + modeLabel + ' → ' + totalRows + ' rows';
+  document.getElementById('prev-records').textContent = qty + ' record' + (qty>1?'s':'') + ' → ' + totalRows + ' rows';
   const onuEl = document.getElementById('prev-onu');
   if (hasDummy) { onuEl.style.display='inline'; document.getElementById('prev-onu-qty').textContent = qty; }
   else onuEl.style.display = 'none';
-  bar.style.display = qty > 0 ? 'block' : 'none';
+  bar.style.display = 'block';
 }
 
 // Hook preview update on matCode and qty change
 document.addEventListener('DOMContentLoaded', () => {
-  // Material search events
-  const sdInput = document.getElementById('sdSearch');
-  sdInput.addEventListener('input', sdFilter);
-  sdInput.addEventListener('focus', sdFocus);
-  sdInput.addEventListener('keydown', sdKey);
-
-  // Close on focus leaving sd-wrap
-  document.getElementById('sdWrap').addEventListener('focusout', sdFocusOut);
-
-  // Clear button
-  document.getElementById('sdClearBtn').addEventListener('mousedown', function(e) {
-    e.preventDefault();
-    sdClear();
-  });
-
-  // Preview updates
+  document.getElementById('matCode').addEventListener('change', updatePreview);
   document.getElementById('qty').addEventListener('input', updatePreview);
   document.getElementById('importDate').addEventListener('input', updatePreview);
 });
@@ -895,43 +811,6 @@ function importCSV(event) {
   reader.readAsText(file, 'utf-8');
 }
 
-// ── Mode toggle ──
-let currentMode = 'random';
-
-function setMode(mode) {
-  currentMode = mode;
-  document.getElementById('randomMode').style.display = mode === 'random' ? 'block' : 'none';
-  document.getElementById('manualMode').style.display = mode === 'manual' ? 'block' : 'none';
-  document.getElementById('modeRandom').classList.toggle('active', mode === 'random');
-  document.getElementById('modeManual').classList.toggle('active', mode === 'manual');
-  if (mode === 'manual') { countSN(); document.getElementById('manualSN').focus(); }
-  updatePreview();
-}
-
-function parseSNList() {
-  const raw = document.getElementById('manualSN').value;
-  // split by newline or comma, trim, filter empty
-  const all = raw.split(/[
-,]+/).map(s => s.trim()).filter(s => s.length > 0);
-  const seen = new Set();
-  const unique = [], dups = [];
-  all.forEach(s => {
-    if (seen.has(s)) dups.push(s);
-    else { seen.add(s); unique.push(s); }
-  });
-  return { all, unique, dups };
-}
-
-function countSN() {
-  const { all, unique, dups } = parseSNList();
-  const el = document.getElementById('snCounter');
-  if (all.length === 0) { el.innerHTML = ''; return; }
-  let html = '<span class="cnt-ok">' + unique.length + ' SN</span>';
-  if (dups.length > 0) html += ' &nbsp;·&nbsp; <span class="cnt-dup">ซ้ำ ' + dups.length + ' รายการ (จะถูกข้าม)</span>';
-  el.innerHTML = html;
-  updatePreview();
-}
-
 function generate() {
   clearAlert();
   const matCode = document.getElementById('matCode').value;
@@ -942,26 +821,16 @@ function generate() {
   const storeLoc = document.getElementById('storeLoc').value.trim();
   const importDate = document.getElementById('importDate').value.trim() || todayStr();
   const shipTo = document.getElementById('shipTo').value.trim();
-  // Get serials based on mode
-  let serials = [];
-  if (currentMode === 'manual') {
-    const { unique } = parseSNList();
-    if (unique.length === 0) { showAlert('⚠ กรุณากรอก Serial No อย่างน้อย 1 รายการ', 'error'); return; }
-    serials = unique;
-  } else {
-    const qty = parseInt(document.getElementById('qty').value) || 1;
-    for (let i = 0; i < qty; i++) serials.push(randSerial16());
-  }
-  const qty = serials.length;
+  const qty = parseInt(document.getElementById('qty').value) || 1;
 
   if (!/^\d{8}$/.test(importDate)) { showAlert('⚠ Import Date ต้องเป็น YYYYMMDD (8 ตัวเลข)', 'error'); return; }
 
-  const r = sdSelected;
-  if (!r) { showAlert('⚠ กรุณาเลือก Material Code', 'error'); return; }
-  const vendor = r.vendor;
-  const spType = r.type;
-  const model = r.model;
-  const snPat = r.sn;
+  const sel = document.getElementById('matCode');
+  const opt = sel.selectedOptions[0];
+  const vendor = opt.dataset.v;
+  const spType = opt.dataset.t;
+  const model = opt.dataset.m;
+  const snPat = opt.dataset.s;
 
   const d = DEFAULTS[currentTemplate];
   const filename = d.prefix + '_' + importDate + '_' + timeStr() + '.dat';
@@ -977,7 +846,8 @@ function generate() {
   lines.push('01|' + filename);
 
   let totalRows = 0;
-  for (const sn of serials) {
+  for (let i = 0; i < qty; i++) {
+    const sn = randSerial16();
     const row = '02|' + sn + '|' + importDate + '|' + matCode + '|' + compCode + '|' + plant + '|' + storeLoc + '||' + shipTo + '|' + vendor + '|' + spType + '|' + model + '|' + snPat;
     lines.push(row);
     totalRows++;
