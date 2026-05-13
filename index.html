@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FBSS Import Stock Generator</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tom-select/2.3.1/css/tom-select.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tom-select/2.3.1/js/tom-select.complete.min.js"></script>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -146,6 +148,46 @@
   .btn-edit:hover { opacity: .8; }
   @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
 
+  /* Tom Select dark theme override */
+  .ts-wrapper { width: 100%; }
+  .ts-control {
+    background: var(--surface2) !important; border: 1px solid var(--border) !important;
+    border-radius: 6px !important; padding: 9px 12px !important; color: var(--text) !important;
+    font-family: var(--mono) !important; font-size: 13px !important;
+    box-shadow: none !important; cursor: text !important;
+  }
+  .ts-wrapper.focus .ts-control {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(0,212,255,.12) !important;
+  }
+  .ts-control input {
+    color: var(--text) !important; font-family: var(--mono) !important;
+    font-size: 13px !important; background: transparent !important;
+  }
+  .ts-control input::placeholder { color: var(--muted) !important; }
+  .ts-dropdown {
+    background: var(--surface) !important; border: 1px solid var(--accent) !important;
+    border-radius: 8px !important; margin-top: 4px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
+    font-family: var(--mono) !important; font-size: 12px !important;
+    z-index: 500 !important;
+  }
+  .ts-dropdown .option {
+    color: var(--text) !important; padding: 8px 12px !important;
+    border-bottom: 1px solid rgba(30,58,95,.3) !important;
+  }
+  .ts-dropdown .option:hover,
+  .ts-dropdown .option.active { background: rgba(0,212,255,.08) !important; color: var(--text) !important; }
+  .ts-dropdown .optgroup-header {
+    color: var(--accent) !important; font-size: 10px !important;
+    letter-spacing: 2px !important; text-transform: uppercase !important;
+    background: rgba(0,212,255,.05) !important; padding: 6px 12px !important;
+    font-weight: 700 !important; border-bottom: 1px solid var(--border) !important;
+  }
+  .ts-dropdown-content { max-height: 280px !important; }
+  .highlight { background: rgba(0,212,255,.25) !important; border-radius: 2px !important; color: var(--text) !important; }
+  .ts-wrapper .ts-control .item { color: var(--accent) !important; font-family: var(--mono) !important; }
+
   /* Modal */
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7);
@@ -228,7 +270,7 @@
           <label style="margin-bottom:0">Material Code</label>
           <button class="btn-manage" onclick="openManage()">✎ Manage Records</button>
         </div>
-        <select id="matCode" onchange="onMatChange()"><option value="">— Select Material Code —</option></select>
+        <select id="matCode"><option value="">— Select Material Code —</option></select>
         <div class="mat-info" id="matInfo" style="display:none">
           <div><span>Vendor: </span><strong id="mi-vendor"></strong></div>
           <div><span>Type: </span><strong id="mi-type"></strong></div>
@@ -411,34 +453,64 @@ let currentTemplate = '3bb';
 let lastOutput = '';
 let lastFilename = '';
 let sdSelected = null;
+let tomSelect = null;
 let editingTpl = '3bb';
 
-// ── Select / populateMat ──
-function populateMat(tpl) {
-  const sel = document.getElementById('matCode');
-  const data = getMatData(tpl);
-  sel.innerHTML = '<option value="">— Select Material Code —</option>';
-  data.forEach(r => {
-    const o = document.createElement('option');
-    o.value = r[0];
-    o.textContent = r[0] + ' [' + r[2] + '] ' + r[3];
-    o.dataset.v = r[1]; o.dataset.t = r[2]; o.dataset.m = r[3]; o.dataset.s = r[4];
-    sel.appendChild(o);
+// ── Tom Select init ──
+function buildOptions(tpl) {
+  return getMatData(tpl).map(function(r) {
+    return { value: r[0], text: r[0] + ' [' + r[2] + '] ' + r[3], vendor: r[1], type: r[2], model: r[3], sn: r[4] };
   });
+}
+
+function initTomSelect() {
+  tomSelect = new TomSelect('#matCode', {
+    valueField: 'value',
+    labelField: 'text',
+    searchField: ['value', 'text', 'vendor', 'type', 'model'],
+    options: buildOptions('3bb'),
+    placeholder: 'ค้นหา Material Code, Model, Type, Vendor...',
+    maxOptions: 500,
+    onChange: onMatChange,
+    render: {
+      option: function(data, escape) {
+        return '<div style="display:flex;gap:8px;align-items:baseline">'
+          + '<span style="color:var(--text);min-width:120px">' + escape(data.value) + '</span>'
+          + '<span style="color:var(--accent2);font-size:10px;background:rgba(14,165,233,.12);padding:1px 6px;border-radius:3px;white-space:nowrap">' + escape(data.type) + '</span>'
+          + '<span style="color:var(--muted)">' + escape(data.model) + '</span>'
+          + '</div>';
+      },
+      item: function(data, escape) {
+        return '<div>' + escape(data.value) + ' [' + escape(data.type) + '] ' + escape(data.model) + '</div>';
+      },
+      no_results: function() {
+        return '<div style="padding:12px;color:var(--muted);text-align:center;font-family:var(--mono);font-size:12px">ไม่พบรายการที่ตรงกัน</div>';
+      }
+    }
+  });
+}
+
+function populateMat(tpl) {
+  const options = buildOptions(tpl);
+  if (tomSelect) {
+    tomSelect.clearOptions();
+    tomSelect.addOptions(options);
+    tomSelect.clear(true);
+  }
   sdSelected = null;
   document.getElementById('matInfo').style.display = 'none';
 }
 
-function onMatChange() {
-  const sel = document.getElementById('matCode');
-  const opt = sel.selectedOptions[0];
+function onMatChange(val) {
   const info = document.getElementById('matInfo');
-  if (!opt || !opt.value) { info.style.display = 'none'; sdSelected = null; updatePreview(); return; }
-  sdSelected = { code: opt.value, vendor: opt.dataset.v, type: opt.dataset.t, model: opt.dataset.m, sn: opt.dataset.s };
-  document.getElementById('mi-vendor').textContent = opt.dataset.v;
-  document.getElementById('mi-type').textContent = opt.dataset.t;
-  document.getElementById('mi-model').textContent = opt.dataset.m;
-  document.getElementById('mi-sn').textContent = opt.dataset.s;
+  if (!val || !tomSelect) { info.style.display = 'none'; sdSelected = null; updatePreview(); return; }
+  const opt = tomSelect.options[val];
+  if (!opt) return;
+  sdSelected = { code: opt.value, vendor: opt.vendor, type: opt.type, model: opt.model, sn: opt.sn };
+  document.getElementById('mi-vendor').textContent = opt.vendor;
+  document.getElementById('mi-type').textContent = opt.type;
+  document.getElementById('mi-model').textContent = opt.model;
+  document.getElementById('mi-sn').textContent = opt.sn;
   info.style.display = 'flex';
   updatePreview();
 }
@@ -490,8 +562,8 @@ function saveManage() {
     inputs.forEach((inp, ci) => { CUSTOM[editingTpl][i][ci] = inp.value; });
   });
   populateMat(editingTpl);
+  if (tomSelect) tomSelect.clear();
   document.getElementById('matInfo').style.display = 'none';
-  document.getElementById('matCode').value = '';
   closeManage();
 }
 
@@ -574,6 +646,7 @@ function setTemplate(tpl) {
   document.getElementById('plant').value = d.plant;
   document.getElementById('storeLoc').value = d.storeLoc;
   populateMat(tpl);
+  if (tomSelect) { tomSelect.clear(); }
   document.getElementById('matInfo').style.display = 'none';
   setLockState(false);
   document.getElementById('manualSN').value = '';
@@ -799,7 +872,7 @@ function clearOutput() {
 }
 
 // ── Init ──
-populateMat('3bb');
+initTomSelect();
 setLockState(false);
 document.getElementById('importDate').value = todayStr();
 document.getElementById('qty').addEventListener('input', updatePreview);
