@@ -453,7 +453,7 @@ let currentTemplate = '3bb';
 let lastOutput = '';
 let lastFilename = '';
 let sdSelected = null;
-let tomSelect = null;
+let matSelect = null;
 let editingTpl = '3bb';
 
 // ── Tom Select init ──
@@ -465,8 +465,8 @@ function buildOptions(tpl) {
 
 function initTomSelect(tpl) {
   const opts = buildOptions(tpl || '3bb');
-  if (tomSelect) { tomSelect.destroy(); tomSelect = null; }
-  tomSelect = new TomSelect('#matCode', {
+  if (matSelect) { matSelect.destroy(); matSelect = null; }
+  matSelect = new TomSelect('#matCode', {
     valueField: 'value',
     labelField: 'text',
     searchField: ['value', 'text', 'vendor', 'type', 'model'],
@@ -503,8 +503,8 @@ function populateMat(tpl) {
 
 function onMatChange(val) {
   const info = document.getElementById('matInfo');
-  if (!val || !tomSelect) { info.style.display = 'none'; sdSelected = null; updatePreview(); return; }
-  const opt = tomSelect.options[val];
+  if (!val || !matSelect) { info.style.display = 'none'; sdSelected = null; updatePreview(); return; }
+  const opt = matSelect.options[val];
   if (!opt) return;
   sdSelected = { code: opt.value, vendor: opt.vendor, type: opt.type, model: opt.model, sn: opt.sn };
   document.getElementById('mi-vendor').textContent = opt.vendor;
