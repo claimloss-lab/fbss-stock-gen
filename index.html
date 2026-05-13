@@ -226,7 +226,7 @@
   .btn-manage:hover { border-color: var(--accent); color: var(--accent); }
 
   /* Mode toggle */
-  .mode-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 0; }
+  .mode-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 0; min-width: 0; }
   .mode-btn { flex: 1; padding: 7px 16px; background: var(--surface2); border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; letter-spacing: 1px; transition: all .15s; }
   .mode-btn.active { background: var(--accent); color: #000; font-weight: 700; }
   .mode-btn:hover:not(.active) { background: var(--border); color: var(--text); }
@@ -311,6 +311,7 @@
           <div class="mode-toggle">
             <button class="mode-btn active" id="modeRandom" onclick="setMode('random')">⚡ Random</button>
             <button class="mode-btn" id="modeManual" onclick="setMode('manual')">✎ Manual</button>
+            <button class="mode-btn" id="modeRunning" onclick="setMode('running')">⇌ Running</button>
           </div>
         </div>
         <!-- Random mode -->
@@ -326,6 +327,25 @@
             placeholder="วาง Serial No ทีละบรรทัด หรือคั่นด้วยจุลภาค (,)&#10;ตัวอย่าง:&#10;ABC1234567890001&#10;ABC1234567890002&#10;ABC1234567890003"
             oninput="countSN()"></textarea>
           <div class="sn-counter" id="snCounter"></div>
+        </div>
+        <!-- Running mode -->
+        <div id="runningMode" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:6px">
+            <div class="form-group" style="margin:0">
+              <label>Prefix</label>
+              <input type="text" id="runPrefix" placeholder="e.g. AIOTSNTEST" oninput="updateRunningPreview()" style="text-transform:uppercase" />
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Start Number</label>
+              <input type="number" id="runStart" placeholder="e.g. 10000" min="0" oninput="updateRunningPreview()" />
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>End Number</label>
+              <input type="number" id="runEnd" placeholder="e.g. 99999" min="0" oninput="updateRunningPreview()" />
+            </div>
+          </div>
+          <div class="sn-counter" id="runCounter"></div>
+          <div id="runSample" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px"></div>
         </div>
       </div>
     </div>
@@ -649,6 +669,11 @@ function setTemplate(tpl) {
   setLockState(false);
   document.getElementById('manualSN').value = '';
   document.getElementById('snCounter').innerHTML = '';
+  document.getElementById('runPrefix').value = '';
+  document.getElementById('runStart').value = '';
+  document.getElementById('runEnd').value = '';
+  document.getElementById('runCounter').innerHTML = '';
+  document.getElementById('runSample').textContent = '';
 }
 
 // ── Mode toggle ──
@@ -658,9 +683,12 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById('randomMode').style.display = mode === 'random' ? 'block' : 'none';
   document.getElementById('manualMode').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('runningMode').style.display = mode === 'running' ? 'block' : 'none';
   document.getElementById('modeRandom').classList.toggle('active', mode === 'random');
   document.getElementById('modeManual').classList.toggle('active', mode === 'manual');
+  document.getElementById('modeRunning').classList.toggle('active', mode === 'running');
   if (mode === 'manual') { countSN(); document.getElementById('manualSN').focus(); }
+  if (mode === 'running') updateRunningPreview();
   updatePreview();
 }
 
@@ -686,6 +714,67 @@ function countSN() {
   updatePreview();
 }
 
+// ── Running Number mode ──
+function getRunningSerials() {
+  const prefix = (document.getElementById('runPrefix').value || '').toUpperCase();
+  const start  = parseInt(document.getElementById('runStart').value);
+  const end    = parseInt(document.getElementById('runEnd').value);
+  if (!prefix || isNaN(start) || isNaN(end) || start > end) return [];
+
+  const serials = [];
+  for (let n = start; n <= end; n++) {
+    // pad number so total length = 16
+    const numLen = 16 - prefix.length;
+    if (numLen <= 0) break; // prefix too long
+    const padded = String(n).padStart(numLen, '0');
+    // if number exceeds padded width, use as-is (no truncation)
+    serials.push(prefix + padded);
+  }
+  return serials;
+}
+
+function updateRunningPreview() {
+  const prefix = (document.getElementById('runPrefix').value || '').toUpperCase();
+  const start  = parseInt(document.getElementById('runStart').value);
+  const end    = parseInt(document.getElementById('runEnd').value);
+  const counterEl = document.getElementById('runCounter');
+  const sampleEl  = document.getElementById('runSample');
+
+  if (!prefix || isNaN(start) || isNaN(end)) {
+    counterEl.innerHTML = '';
+    sampleEl.textContent = '';
+    updatePreview();
+    return;
+  }
+
+  const numLen = 16 - prefix.length;
+
+  if (numLen <= 0) {
+    counterEl.innerHTML = '<span class="cnt-err">Prefix ยาวเกิน 16 หลัก</span>';
+    sampleEl.textContent = '';
+    updatePreview();
+    return;
+  }
+
+  if (start > end) {
+    counterEl.innerHTML = '<span class="cnt-err">Start ต้องน้อยกว่าหรือเท่ากับ End</span>';
+    sampleEl.textContent = '';
+    updatePreview();
+    return;
+  }
+
+  const count = end - start + 1;
+  const firstSN = prefix + String(start).padStart(numLen, '0');
+  const lastSN  = prefix + String(end).padStart(numLen, '0');
+
+  counterEl.innerHTML = '<span class="cnt-ok">' + count + ' SN</span>'
+    + ' &nbsp;·&nbsp; <span style="color:var(--muted)">length: ' + firstSN.length + ' chars</span>'
+    + (firstSN.length !== 16 ? ' <span class="cnt-dup">(not 16 digits — check prefix length)</span>' : '');
+
+  sampleEl.textContent = 'First: ' + firstSN + '   Last: ' + lastSN;
+  updatePreview();
+}
+
 // ── Preview ──
 function updatePreview() {
   const matCode = document.getElementById('matCode').value;
@@ -695,6 +784,10 @@ function updatePreview() {
   let qty = 0;
   if (currentMode === 'manual') {
     qty = parseSNList().unique.length;
+  } else if (currentMode === 'running') {
+    const s = parseInt(document.getElementById('runStart').value);
+    const e = parseInt(document.getElementById('runEnd').value);
+    qty = (!isNaN(s) && !isNaN(e) && e >= s) ? (e - s + 1) : 0;
   } else {
     qty = parseInt(document.getElementById('qty').value) || 1;
   }
@@ -795,6 +888,9 @@ function generate() {
     const res = parseSNList();
     if (res.unique.length === 0) { showAlert('กรุณากรอก Serial No อย่างน้อย 1 รายการ', 'error'); return; }
     serials = res.unique;
+  } else if (currentMode === 'running') {
+    serials = getRunningSerials();
+    if (serials.length === 0) { showAlert('กรุณากรอก Prefix, Start และ End ให้ถูกต้อง', 'error'); return; }
   } else {
     const qty = parseInt(document.getElementById('qty').value) || 1;
     for (let i = 0; i < qty; i++) serials.push(randSerial16());
