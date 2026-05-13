@@ -463,42 +463,42 @@ function buildOptions(tpl) {
   });
 }
 
-function initTomSelect() {
+function initTomSelect(tpl) {
+  const opts = buildOptions(tpl || '3bb');
+  if (tomSelect) { tomSelect.destroy(); tomSelect = null; }
   tomSelect = new TomSelect('#matCode', {
     valueField: 'value',
     labelField: 'text',
     searchField: ['value', 'text', 'vendor', 'type', 'model'],
-    options: buildOptions('3bb'),
+    options: opts,
+    items: [],
     placeholder: 'ค้นหา Material Code, Model, Type, Vendor...',
-    maxOptions: 500,
+    maxOptions: 1000,
     onChange: onMatChange,
     render: {
       option: function(data, escape) {
-        return '<div style="display:flex;gap:8px;align-items:baseline">'
-          + '<span style="color:var(--text);min-width:120px">' + escape(data.value) + '</span>'
-          + '<span style="color:var(--accent2);font-size:10px;background:rgba(14,165,233,.12);padding:1px 6px;border-radius:3px;white-space:nowrap">' + escape(data.type) + '</span>'
-          + '<span style="color:var(--muted)">' + escape(data.model) + '</span>'
+        return '<div style="display:flex;gap:8px;align-items:baseline;padding:7px 12px">'
+          + '<span style="color:var(--text);min-width:120px;font-size:12px">' + escape(data.value) + '</span>'
+          + '<span style="color:var(--accent2);font-size:10px;background:rgba(14,165,233,.12);padding:1px 6px;border-radius:3px;white-space:nowrap;flex-shrink:0">' + escape(data.type) + '</span>'
+          + '<span style="color:var(--muted);font-size:11px">' + escape(data.model) + '</span>'
           + '</div>';
       },
       item: function(data, escape) {
         return '<div>' + escape(data.value) + ' [' + escape(data.type) + '] ' + escape(data.model) + '</div>';
       },
       no_results: function() {
-        return '<div style="padding:12px;color:var(--muted);text-align:center;font-family:var(--mono);font-size:12px">ไม่พบรายการที่ตรงกัน</div>';
+        return '<div style="padding:14px;color:var(--muted);text-align:center;font-family:var(--mono);font-size:12px">ไม่พบรายการที่ตรงกัน</div>';
       }
     }
   });
 }
 
 function populateMat(tpl) {
-  const options = buildOptions(tpl);
-  if (tomSelect) {
-    tomSelect.clearOptions();
-    tomSelect.addOptions(options);
-    tomSelect.clear(true);
-  }
+  // Reinit Tom Select with new template options
+  initTomSelect(tpl);
   sdSelected = null;
   document.getElementById('matInfo').style.display = 'none';
+  updatePreview();
 }
 
 function onMatChange(val) {
@@ -562,7 +562,6 @@ function saveManage() {
     inputs.forEach((inp, ci) => { CUSTOM[editingTpl][i][ci] = inp.value; });
   });
   populateMat(editingTpl);
-  if (tomSelect) tomSelect.clear();
   document.getElementById('matInfo').style.display = 'none';
   closeManage();
 }
@@ -646,7 +645,6 @@ function setTemplate(tpl) {
   document.getElementById('plant').value = d.plant;
   document.getElementById('storeLoc').value = d.storeLoc;
   populateMat(tpl);
-  if (tomSelect) { tomSelect.clear(); }
   document.getElementById('matInfo').style.display = 'none';
   setLockState(false);
   document.getElementById('manualSN').value = '';
@@ -872,7 +870,7 @@ function clearOutput() {
 }
 
 // ── Init ──
-initTomSelect();
+populateMat('3bb');
 setLockState(false);
 document.getElementById('importDate').value = todayStr();
 document.getElementById('qty').addEventListener('input', updatePreview);
